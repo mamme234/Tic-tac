@@ -244,8 +244,47 @@
         .success {
             color: #4ecdc4;
         }
+
+        .ad-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            flex-direction: column;
+        }
+
+        .ad-loading.active {
+            display: flex;
+        }
+
+        .ad-loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid #fff;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .ad-loading-text {
+            color: white;
+            margin-top: 20px;
+            font-size: 16px;
+        }
     </style>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Your Ad SDK -->
+    <script src='//libtl.com/sdk.js' data-zone='11068102' data-sdk='show_11068102'></script>
 </head>
 <body>
 <div class="container" id="app">
@@ -306,10 +345,16 @@
 
         <div class="button-group">
             <button class="reset-btn" id="resetBtn">🔄 New Game</button>
-            <button class="watch-ad-btn" id="watchAdBtn">📺 Watch Ad</button>
+            <button class="watch-ad-btn" id="watchAdBtn">📺 Watch Ad to Unlock</button>
         </div>
         <div class="loading" id="loading">🤖 Bot is thinking...</div>
     </div>
+</div>
+
+<!-- Ad Loading Overlay -->
+<div id="adLoading" class="ad-loading">
+    <div class="ad-loading-spinner"></div>
+    <div class="ad-loading-text">📺 Loading ad... Please wait</div>
 </div>
 
 <script>
@@ -360,6 +405,7 @@
     const loadingDiv = document.getElementById('loading');
     const resetBtn = document.getElementById('resetBtn');
     const watchAdBtn = document.getElementById('watchAdBtn');
+    const adLoadingOverlay = document.getElementById('adLoading');
     
     // API base URL
     const API_BASE = window.location.origin;
@@ -461,16 +507,28 @@
         }
     }
     
-    async function watchAd() {
-        if (!penaltyActive) {
-            statusElement.textContent = "No penalty active! Keep playing!";
-            return;
+    // ----- AD INTEGRATION (Your ad network) -----
+    async function watchRewardedAd() {
+        // Check if ad SDK is available
+        if (typeof window.show_11068102 !== 'function') {
+            statusElement.textContent = "⚠️ Ad SDK not ready. Please try again.";
+            console.error('Ad SDK not loaded');
+            return false;
         }
         
-        loadingDiv.style.display = 'block';
-        statusElement.textContent = "📺 Loading ad...";
+        // Show loading overlay
+        adLoadingOverlay.classList.add('active');
+        statusElement.textContent = "📺 Loading ad... Please wait";
         
         try {
+            // Call your rewarded interstitial ad
+            // This will show the ad to the user
+            await window.show_11068102();
+            
+            // If we get here, user watched the ad till the end
+            adLoadingOverlay.classList.remove('active');
+            
+            // Call backend to remove penalty
             const response = await fetch('/api/watchad', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -481,17 +539,71 @@
             if (data.success) {
                 penaltyActive = false;
                 penaltyTimerDiv.style.display = 'none';
-                statusElement.textContent = "✅ Penalty removed! Start new game!";
-                startNewGame();
+                statusElement.textContent = "✅ Ad watched! Penalty removed! Starting new game...";
+                
+                // Reset game state
+                setTimeout(() => {
+                    startNewGame();
+                }, 1500);
+                return true;
             } else {
-                statusElement.textContent = data.message;
+                statusElement.textContent = data.message || "Failed to remove penalty";
+                return false;
             }
         } catch (error) {
-            console.error('Error watching ad:', error);
-            statusElement.textContent = "Ad failed. Try again!";
-        } finally {
-            loadingDiv.style.display = 'none';
+            console.error('Ad error:', error);
+            adLoadingOverlay.classList.remove('active');
+            statusElement.textContent = "❌ Ad failed or was skipped. Please try again.";
+            return false;
         }
+    }
+    
+    // Alternative: Rewarded Popup format
+    async function watchRewardedPopupAd() {
+        if (typeof window.show_11068102 !== 'function') {
+            statusElement.textContent = "⚠️ Ad SDK not ready";
+            return false;
+        }
+        
+        adLoadingOverlay.classList.add('active');
+        
+        try {
+            // Use popup format
+            await window.show_11068102('pop');
+            
+            adLoadingOverlay.classList.remove('active');
+            
+            const response = await fetch('/api/watchad', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                penaltyActive = false;
+                penaltyTimerDiv.style.display = 'none';
+                statusElement.textContent = "✅ Penalty removed! New game started!";
+                startNewGame();
+                return true;
+            }
+            return false;
+        } catch (e) {
+            adLoadingOverlay.classList.remove('active');
+            statusElement.textContent = "❌ Ad skipped or error";
+            return false;
+        }
+    }
+    
+    // Watch ad button handler
+    async function onWatchAd() {
+        if (!penaltyActive) {
+            statusElement.textContent = "No penalty active! Keep playing!";
+            return;
+        }
+        
+        // Use the rewarded interstitial ad
+        await watchRewardedAd();
     }
     
     function updateUI() {
@@ -705,7 +817,7 @@
     
     // Event listeners
     if (resetBtn) resetBtn.onclick = () => startNewGame();
-    if (watchAdBtn) watchAdBtn.onclick = () => watchAd();
+    if (watchAdBtn) watchAdBtn.onclick = () => onWatchAd();
 </script>
 </body>
     </html>
