@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
 const { Telegraf, Markup } = require('telegraf');
@@ -21,7 +20,7 @@ const WIN_REWARD = 0.1;
 // ---------- TELEGRAM BOT SETUP ----------
 const bot = new Telegraf(BOT_TOKEN);
 
-// ---------- JSON FILE STORAGE (No SQLite needed) ----------
+// ---------- JSON FILE STORAGE ----------
 const DATA_FILE = path.join(__dirname, 'users.json');
 
 // Initialize data file if it doesn't exist
@@ -55,6 +54,7 @@ function getUser(userId, username = null) {
             current_player: null,
             games_played: 0,
             wins: 0,
+            verified: false,
             created_at: Date.now()
         };
         writeUsers(users);
@@ -74,11 +74,64 @@ function updateUser(userId, updates) {
             current_player: null,
             games_played: 0,
             wins: 0,
+            verified: false,
             created_at: Date.now()
         };
     }
     Object.assign(users[userId], updates);
     writeUsers(users);
+}
+
+// ---------- IMPROVED MEMBERSHIP CHECK ----------
+async function isMember(userId, ctx) {
+    try {
+        console.log(`Checking membership for user ${userId} in chat ${GROUP_ID}`);
+        
+        // First, try to get chat member
+        const member = await ctx.telegram.getChatMember(GROUP_ID, userId);
+        
+        console.log(`Member status for ${userId}: ${member.status}`);
+        
+        // Check if user is member, administrator, or creator
+        const isMemberStatus = ['member', 'administrator', 'creator'].includes(member.status);
+        
+        if (isMemberStatus) {
+            // Update user as verified in database
+            updateUser(userId, { verified: true });
+            return true;
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('Membership check error:', error);
+        
+        // If error is because bot is not admin, show helpful message
+        if (error.response && error.response.error_code === 403) {
+            console.error('Bot is not an admin of the group!');
+            return false;
+        }
+        
+        // If user not found in chat
+        if (error.response && error.response.error_code === 400) {
+            return false;
+        }
+        
+        return false;
+    }
+}
+
+// ---------- FORCE CHECK FOR OWNER/ADMIN ----------
+async function forceVerifyOwner(ctx) {
+    const userId = ctx.from.id;
+    const userData = getUser(userId);
+    
+    // If already verified, return true
+    if (userData.verified) {
+        return true;
+    }
+    
+    // Check membership
+    return await isMember(userId, ctx);
 }
 
 // ---------- TIC-TAC-TOE AI (UNBEATABLE) ----------
@@ -147,17 +200,6 @@ function getBestMove(board) {
     return bestMove;
 }
 
-// ---------- CHECK MEMBERSHIP ----------
-async function isMember(userId, ctx) {
-    try {
-        const member = await ctx.telegram.getChatMember(GROUP_ID, userId);
-        return ['member', 'administrator', 'creator'].includes(member.status);
-    } catch (error) {
-        console.error('Membership check error:', error);
-        return false;
-    }
-}
-
 // ---------- RENDER BOARD ----------
 function renderBoard(board) {
     const symbols = { null: "◻️", 'X': "❌", 'O': "⭕" };
@@ -182,46 +224,92 @@ function renderBoard(board) {
 bot.start(async (ctx) => {
     const userId = ctx.from.id;
     const firstName = ctx.from.first_name;
+    const userData = getUser(userId);
     
-    await ctx.replyWithMarkdown(
-        `👋 **Welcome ${firstName}!**\n\n` +
-        `🎮 **IMPOSSIBLE TIC-TAC-TOE BOT** 🎮\n\n` +
-        `⚠️ **First, join our community:**\n` +
-        `👉 ${GROUP_LINK}\n\n` +
-        `✅ After joining, send /verify\n\n` +
-        `💰 **How it works:**\n` +
-        `• Beat the bot? +$${WIN_REWARD} (impossible!)\n` +
-        `• Lose 3 times → ${PENALTY_MINUTES}min penalty\n` +
-        `• Use /watchad to remove penalty\n\n` +
-        `Commands:\n` +
-        `/play - Start a game\n` +
-        `/verify - Check group membership\n` +
-        `/balance - Check your balance\n` +
-        `/watchad - Remove penalty\n` +
-        `/stats - Your game stats`
-    );
+    // Check if already verified
+    const member = await forceVerifyOwner(ctx);
+    
+    if (member) {
+        await ctx.replyWithMarkdown(
+            `👋 **Welcome back ${firstName}!**\n\n` +
+            `✅ You are already a verified member of our community!\n\n` +
+            `🎮 **IMPOSSIBLE TIC-TAC-TOE BOT** 🎮\n\n` +
+            `💰 **How it works:**\n` +
+            `• Beat the bot? +$${WIN_REWARD} (almost impossible!)\n` +
+            `• Lose 3 times → ${PENALTY_MINUTES}min penalty\n` +
+            `• Use /watchad to remove penalty\n\n` +
+            `Commands:\n` +
+            `/play - Start a game\n` +
+            `/balance - Check your balance\n` +
+            `/watchad - Remove penalty\n` +
+            `/stats - Your game stats\n` +
+            `/verify - Re-check membership`
+        );
+    } else {
+        await ctx.replyWithMarkdown(
+            `👋 **Welcome ${firstName}!**\n\n` +
+            `🎮 **IMPOSSIBLE TIC-TAC-TOE BOT** 🎮\n\n` +
+            `⚠️ **First, join our community:**\n` +
+            `👉 ${GROUP_LINK}\n\n` +
+            `✅ After joining, send /verify\n\n` +
+            `💰 **How it works:**\n` +
+            `• Beat the bot? +$${WIN_REWARD} (impossible!)\n` +
+            `• Lose 3 times → ${PENALTY_MINUTES}min penalty\n` +
+            `• Use /watchad to remove penalty\n\n` +
+            `Commands:\n` +
+            `/play - Start a game\n` +
+            `/verify - Check group membership\n` +
+            `/balance - Check your balance\n` +
+            `/watchad - Remove penalty\n` +
+            `/stats - Your game stats`
+        );
+    }
 });
 
 bot.command('verify', async (ctx) => {
     const userId = ctx.from.id;
-    await ctx.reply("🔍 Checking your membership...");
+    const firstName = ctx.from.first_name;
     
-    const member = await isMember(userId, ctx);
+    await ctx.reply("🔍 Checking your membership... Please wait.");
     
-    if (member) {
-        updateUser(userId, { username: ctx.from.username || null });
+    try {
+        const member = await isMember(userId, ctx);
+        
+        if (member) {
+            updateUser(userId, { verified: true });
+            await ctx.replyWithMarkdown(
+                `✅ **VERIFIED!**\n\n` +
+                `Welcome ${firstName}, you are a member of ${GROUP_LINK}\n\n` +
+                `🎮 Use /play to start your game!\n\n` +
+                `⚠️ Remember: Bot is unbeatable! Can you win?`
+            );
+            
+            // Post to group that new member verified
+            try {
+                await ctx.telegram.sendMessage(
+                    GROUP_ID,
+                    `🎮 ${firstName} just joined and verified to play Tic-Tac-Toe!`
+                );
+            } catch (e) {
+                console.error('Failed to post to group:', e);
+            }
+        } else {
+            await ctx.replyWithMarkdown(
+                `❌ **NOT VERIFIED** ❌\n\n` +
+                `You are not a member of our community yet.\n\n` +
+                `👉 Please join: ${GROUP_LINK}\n\n` +
+                `After joining, send /verify again.\n\n` +
+                `⚠️ **Important:** Make sure the bot is an administrator of the group with permission to see members.`
+            );
+        }
+    } catch (error) {
+        console.error('Verify command error:', error);
         await ctx.replyWithMarkdown(
-            `✅ **VERIFIED!**\n\n` +
-            `You're a member of ${GROUP_LINK}\n` +
-            `🎮 Use /play to start your game!`
-        );
-    } else {
-        await ctx.replyWithMarkdown(
-            `❌ **NOT VERIFIED** ❌\n\n` +
-            `You must join our community first:\n` +
-            `${GROUP_LINK}\n\n` +
-            `After joining, send /verify again.\n\n` +
-            `⚠️ Make sure the bot is admin of the group!`
+            `❌ **Error checking membership** ❌\n\n` +
+            `Please make sure:\n` +
+            `1. The bot is an administrator of ${GROUP_LINK}\n` +
+            `2. You have joined the group\n` +
+            `3. Then try /verify again`
         );
     }
 });
@@ -229,7 +317,7 @@ bot.command('verify', async (ctx) => {
 bot.command('play', async (ctx) => {
     const userId = ctx.from.id;
     
-    // Check membership
+    // Check membership (force re-check)
     const member = await isMember(userId, ctx);
     
     if (!member) {
@@ -237,7 +325,8 @@ bot.command('play', async (ctx) => {
             `❌ **Access Denied** ❌\n\n` +
             `You must join our community first:\n` +
             `${GROUP_LINK}\n\n` +
-            `After joining, send /verify`
+            `After joining, send /verify\n\n` +
+            `⚠️ If you already joined, make sure the bot is admin of the group.`
         );
         return;
     }
@@ -337,7 +426,8 @@ bot.command('stats', async (ctx) => {
         `🏆 Wins: ${userData.wins}\n` +
         `💀 Loss streak: ${userData.loss_streak}/3\n` +
         `💰 Balance: $${userData.balance.toFixed(2)}\n` +
-        `📈 Win rate: ${winRate}%\n\n` +
+        `📈 Win rate: ${winRate}%\n` +
+        `✅ Verified: ${userData.verified ? 'Yes' : 'No'}\n\n` +
         `⚠️ Bot is unbeatable - winning is a miracle!`
     );
 });
@@ -348,6 +438,17 @@ bot.action(/move_(\d+)/, async (ctx) => {
     const userId = ctx.from.id;
     
     await ctx.answerCbQuery();
+    
+    // Re-check membership on each move
+    const member = await isMember(userId, ctx);
+    if (!member) {
+        await ctx.editMessageText(
+            `❌ **Access Denied**\n\n` +
+            `You are not a verified member anymore.\n` +
+            `Please join ${GROUP_LINK} and send /verify`
+        );
+        return;
+    }
     
     const userData = getUser(userId);
     const now = Math.floor(Date.now() / 1000);
@@ -393,7 +494,7 @@ bot.action(/move_(\d+)/, async (ctx) => {
         try {
             await ctx.telegram.sendMessage(
                 GROUP_ID,
-                `🏆 **MIRACLE!** @${ctx.from.username || ctx.from.first_name} DEFEATED the unbeatable bot and won $${WIN_REWARD}! 🏆`
+                `🏆 **MIRACLE!** ${ctx.from.first_name} DEFEATED the unbeatable bot and won $${WIN_REWARD}! 🏆`
             );
         } catch (e) {}
         
@@ -548,6 +649,8 @@ const PORT = process.env.PORT || 3000;
 
 bot.launch().then(() => {
     console.log('🤖 Bot @tictactoe1st_bot is running...');
+    console.log(`📢 Group ID: ${GROUP_ID}`);
+    console.log(`🔗 Group Link: ${GROUP_LINK}`);
 }).catch((err) => {
     console.error('Failed to launch bot:', err);
 });
