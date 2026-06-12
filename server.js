@@ -3,12 +3,13 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const { Telegraf, Markup } = require('telegraf');
+const { Telegraf } = require('telegraf');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+// Serve static files from root directory (where your HTML is)
+app.use(express.static(__dirname));
 
 // ---------- CONFIGURATION ----------
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -16,6 +17,7 @@ const GROUP_ID = process.env.CHAT_ID || -1003984859530;
 const GROUP_LINK = "https://t.me/gangs234";
 const PENALTY_MINUTES = 30;
 const WIN_REWARD = 0.1;
+const APP_URL = process.env.APP_URL || "https://your-app.onrender.com";
 
 // ---------- TELEGRAM BOT SETUP ----------
 const bot = new Telegraf(BOT_TOKEN);
@@ -23,7 +25,6 @@ const bot = new Telegraf(BOT_TOKEN);
 // ---------- JSON FILE STORAGE ----------
 const DATA_FILE = path.join(__dirname, 'users.json');
 
-// Initialize data file if it doesn't exist
 if (!fs.existsSync(DATA_FILE)) {
     fs.writeFileSync(DATA_FILE, JSON.stringify({}, null, 2));
 }
@@ -50,8 +51,6 @@ function getUser(userId, username = null) {
             balance: 0,
             loss_streak: 0,
             penalty_end: 0,
-            game_board: null,
-            current_player: null,
             games_played: 0,
             wins: 0,
             verified: false,
@@ -65,203 +64,60 @@ function getUser(userId, username = null) {
 function updateUser(userId, updates) {
     const users = readUsers();
     if (!users[userId]) {
-        users[userId] = {
-            user_id: userId,
-            balance: 0,
-            loss_streak: 0,
-            penalty_end: 0,
-            game_board: null,
-            current_player: null,
-            games_played: 0,
-            wins: 0,
-            verified: false,
-            created_at: Date.now()
-        };
+        users[userId] = { user_id: userId, created_at: Date.now() };
     }
     Object.assign(users[userId], updates);
     writeUsers(users);
 }
 
-// ---------- IMPROVED MEMBERSHIP CHECK ----------
+// ---------- MEMBERSHIP CHECK ----------
 async function isMember(userId, ctx) {
     try {
-        console.log(`Checking membership for user ${userId} in chat ${GROUP_ID}`);
-        
-        // First, try to get chat member
         const member = await ctx.telegram.getChatMember(GROUP_ID, userId);
-        
-        console.log(`Member status for ${userId}: ${member.status}`);
-        
-        // Check if user is member, administrator, or creator
         const isMemberStatus = ['member', 'administrator', 'creator'].includes(member.status);
-        
         if (isMemberStatus) {
-            // Update user as verified in database
             updateUser(userId, { verified: true });
             return true;
         }
-        
         return false;
     } catch (error) {
         console.error('Membership check error:', error);
-        
-        // If error is because bot is not admin, show helpful message
-        if (error.response && error.response.error_code === 403) {
-            console.error('Bot is not an admin of the group!');
-            return false;
-        }
-        
-        // If user not found in chat
-        if (error.response && error.response.error_code === 400) {
-            return false;
-        }
-        
         return false;
     }
 }
 
-// ---------- FORCE CHECK FOR OWNER/ADMIN ----------
-async function forceVerifyOwner(ctx) {
-    const userId = ctx.from.id;
-    const userData = getUser(userId);
-    
-    // If already verified, return true
-    if (userData.verified) {
-        return true;
-    }
-    
-    // Check membership
-    return await isMember(userId, ctx);
-}
-
-// ---------- TIC-TAC-TOE AI (UNBEATABLE) ----------
-function checkWinner(board) {
-    const lines = [
-        [0,1,2], [3,4,5], [6,7,8],
-        [0,3,6], [1,4,7], [2,5,8],
-        [0,4,8], [2,4,6]
-    ];
-    for (let line of lines) {
-        const [a,b,c] = line;
-        if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-            return board[a];
-        }
-    }
-    return null;
-}
-
-function isDraw(board) {
-    return board.every(cell => cell !== null);
-}
-
-function minimax(board, depth, isMax) {
-    const winner = checkWinner(board);
-    if (winner === 'O') return 10 - depth;
-    if (winner === 'X') return -10 + depth;
-    if (isDraw(board)) return 0;
-    
-    if (isMax) {
-        let best = -Infinity;
-        for (let i = 0; i < 9; i++) {
-            if (!board[i]) {
-                board[i] = 'O';
-                best = Math.max(best, minimax(board, depth + 1, false));
-                board[i] = null;
-            }
-        }
-        return best;
-    } else {
-        let best = Infinity;
-        for (let i = 0; i < 9; i++) {
-            if (!board[i]) {
-                board[i] = 'X';
-                best = Math.min(best, minimax(board, depth + 1, true));
-                board[i] = null;
-            }
-        }
-        return best;
-    }
-}
-
-function getBestMove(board) {
-    let bestScore = -Infinity;
-    let bestMove = null;
-    for (let i = 0; i < 9; i++) {
-        if (!board[i]) {
-            board[i] = 'O';
-            const score = minimax(board, 0, false);
-            board[i] = null;
-            if (score > bestScore) {
-                bestScore = score;
-                bestMove = i;
-            }
-        }
-    }
-    return bestMove;
-}
-
-// ---------- RENDER BOARD ----------
-function renderBoard(board) {
-    const symbols = { null: "◻️", 'X': "❌", 'O': "⭕" };
-    const keyboard = [];
-    
-    for (let i = 0; i < 9; i += 3) {
-        const row = [];
-        for (let j = 0; j < 3; j++) {
-            const idx = i + j;
-            const text = symbols[board[idx]];
-            const callback = board[idx] === null ? `move_${idx}` : 'noop';
-            row.push(Markup.button.callback(text, callback));
-        }
-        keyboard.push(row);
-    }
-    keyboard.push([Markup.button.callback("🔄 New Game", "reset")]);
-    
-    return Markup.inlineKeyboard(keyboard);
-}
-
-// ---------- TELEGRAM BOT HANDLERS ----------
+// ---------- BOT COMMANDS ----------
 bot.start(async (ctx) => {
     const userId = ctx.from.id;
     const firstName = ctx.from.first_name;
-    const userData = getUser(userId);
     
-    // Check if already verified
-    const member = await forceVerifyOwner(ctx);
+    // Check membership
+    const member = await isMember(userId, ctx);
+    
+    const keyboard = {
+        inline_keyboard: [
+            [{ text: "🎮 PLAY TIC-TAC-TOE", web_app: { url: `${APP_URL}/index.html` } }],
+            [{ text: "📢 JOIN COMMUNITY", url: GROUP_LINK }],
+            [{ text: "💰 BALANCE", callback_data: "balance" }, { text: "📊 STATS", callback_data: "stats" }]
+        ]
+    };
     
     if (member) {
         await ctx.replyWithMarkdown(
             `👋 **Welcome back ${firstName}!**\n\n` +
-            `✅ You are already a verified member of our community!\n\n` +
-            `🎮 **IMPOSSIBLE TIC-TAC-TOE BOT** 🎮\n\n` +
-            `💰 **How it works:**\n` +
-            `• Beat the bot? +$${WIN_REWARD} (almost impossible!)\n` +
-            `• Lose 3 times → ${PENALTY_MINUTES}min penalty\n` +
-            `• Use /watchad to remove penalty\n\n` +
-            `Commands:\n` +
-            `/play - Start a game\n` +
-            `/balance - Check your balance\n` +
-            `/watchad - Remove penalty\n` +
-            `/stats - Your game stats\n` +
-            `/verify - Re-check membership`
+            `✅ You are verified!\n\n` +
+            `💰 Balance: $${getUser(userId).balance.toFixed(2)}\n\n` +
+            `🎮 Click below to play:`,
+            { reply_markup: keyboard }
         );
     } else {
         await ctx.replyWithMarkdown(
             `👋 **Welcome ${firstName}!**\n\n` +
-            `🎮 **IMPOSSIBLE TIC-TAC-TOE BOT** 🎮\n\n` +
-            `⚠️ **First, join our community:**\n` +
+            `⚠️ **You must join our community first:**\n` +
             `👉 ${GROUP_LINK}\n\n` +
-            `✅ After joining, send /verify\n\n` +
-            `💰 **How it works:**\n` +
-            `• Beat the bot? +$${WIN_REWARD} (impossible!)\n` +
-            `• Lose 3 times → ${PENALTY_MINUTES}min penalty\n` +
-            `• Use /watchad to remove penalty\n\n` +
-            `Commands:\n` +
-            `/play - Start a game\n` +
-            `/verify - Check group membership\n` +
-            `/balance - Check your balance\n` +
-            `/watchad - Remove penalty\n` +
-            `/stats - Your game stats`
+            `✅ After joining, click /verify\n\n` +
+            `Then you can play!`,
+            { reply_markup: keyboard }
         );
     }
 });
@@ -270,401 +126,264 @@ bot.command('verify', async (ctx) => {
     const userId = ctx.from.id;
     const firstName = ctx.from.first_name;
     
-    await ctx.reply("🔍 Checking your membership... Please wait.");
+    await ctx.reply("🔍 Checking your membership...");
     
-    try {
-        const member = await isMember(userId, ctx);
-        
-        if (member) {
-            updateUser(userId, { verified: true });
-            await ctx.replyWithMarkdown(
-                `✅ **VERIFIED!**\n\n` +
-                `Welcome ${firstName}, you are a member of ${GROUP_LINK}\n\n` +
-                `🎮 Use /play to start your game!\n\n` +
-                `⚠️ Remember: Bot is unbeatable! Can you win?`
-            );
-            
-            // Post to group that new member verified
-            try {
-                await ctx.telegram.sendMessage(
-                    GROUP_ID,
-                    `🎮 ${firstName} just joined and verified to play Tic-Tac-Toe!`
-                );
-            } catch (e) {
-                console.error('Failed to post to group:', e);
-            }
-        } else {
-            await ctx.replyWithMarkdown(
-                `❌ **NOT VERIFIED** ❌\n\n` +
-                `You are not a member of our community yet.\n\n` +
-                `👉 Please join: ${GROUP_LINK}\n\n` +
-                `After joining, send /verify again.\n\n` +
-                `⚠️ **Important:** Make sure the bot is an administrator of the group with permission to see members.`
-            );
-        }
-    } catch (error) {
-        console.error('Verify command error:', error);
-        await ctx.replyWithMarkdown(
-            `❌ **Error checking membership** ❌\n\n` +
-            `Please make sure:\n` +
-            `1. The bot is an administrator of ${GROUP_LINK}\n` +
-            `2. You have joined the group\n` +
-            `3. Then try /verify again`
-        );
-    }
-});
-
-bot.command('play', async (ctx) => {
-    const userId = ctx.from.id;
-    
-    // Check membership (force re-check)
     const member = await isMember(userId, ctx);
     
-    if (!member) {
+    if (member) {
+        updateUser(userId, { verified: true });
         await ctx.replyWithMarkdown(
-            `❌ **Access Denied** ❌\n\n` +
-            `You must join our community first:\n` +
-            `${GROUP_LINK}\n\n` +
-            `After joining, send /verify\n\n` +
-            `⚠️ If you already joined, make sure the bot is admin of the group.`
+            `✅ **VERIFIED!**\n\n` +
+            `Welcome ${firstName}!\n\n` +
+            `🎮 Click below to start playing:`,
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: "🎮 PLAY GAME 🎮", web_app: { url: `${APP_URL}/index.html` } }]
+                    ]
+                }
+            }
         );
-        return;
-    }
-    
-    const userData = getUser(userId);
-    const now = Math.floor(Date.now() / 1000);
-    
-    if (userData.penalty_end > now) {
-        const remain = userData.penalty_end - now;
-        const minutes = Math.floor(remain / 60);
-        const seconds = remain % 60;
+    } else {
         await ctx.replyWithMarkdown(
-            `⛔ **PENALTY ACTIVE** ⛔\n\n` +
-            `Time remaining: ${minutes}m ${seconds}s\n` +
-            `Use /watchad to unlock immediately.`
+            `❌ **NOT VERIFIED**\n\n` +
+            `Please join: ${GROUP_LINK}\n\n` +
+            `Then click /verify again.\n\n` +
+            `⚠️ Make sure the bot is admin of the group!`
         );
-        return;
     }
-    
-    // Clear expired penalty
-    if (userData.penalty_end > 0) {
-        updateUser(userId, { penalty_end: 0, loss_streak: 0 });
-    }
-    
-    // Start new game
-    const board = [null, null, null, null, null, null, null, null, null];
-    updateUser(userId, { 
-        game_board: JSON.stringify(board), 
-        current_player: 'X' 
-    });
-    
-    const keyboard = renderBoard(board);
-    await ctx.replyWithMarkdown(
-        "🎮 **Tic-Tac-Toe - IMPOSSIBLE MODE** 🎮\n\n" +
-        "You are ❌ | Bot is ⭕\n" +
-        "⚠️ **Bot uses perfect AI - you cannot win!**\n\n" +
-        "Make your first move:",
-        keyboard
-    );
 });
 
 bot.command('balance', async (ctx) => {
     const userId = ctx.from.id;
     const userData = getUser(userId);
     await ctx.replyWithMarkdown(
-        `💰 **Your Balance** 💰\n\n` +
-        `💵 $${userData.balance.toFixed(2)}\n\n` +
+        `💰 **Your Balance:** $${userData.balance.toFixed(2)}\n\n` +
         `Win reward: +$${WIN_REWARD}\n` +
-        `Can you beat the unbeatable bot?`
-    );
-});
-
-bot.command('watchad', async (ctx) => {
-    const userId = ctx.from.id;
-    const userData = getUser(userId);
-    const now = Math.floor(Date.now() / 1000);
-    
-    if (userData.penalty_end <= now) {
-        await ctx.replyWithMarkdown(
-            "📺 **No active penalty**\n\n" +
-            "You can play normally. Use /play to start a game!"
-        );
-        return;
-    }
-    
-    // Simulate ad watch
-    updateUser(userId, { penalty_end: 0, loss_streak: 0 });
-    
-    // Post to group
-    try {
-        await ctx.telegram.sendMessage(
-            GROUP_ID,
-            `📺 ${ctx.from.first_name} watched an ad to remove penalty!`
-        );
-    } catch (e) {
-        console.error('Failed to post to group:', e);
-    }
-    
-    await ctx.replyWithMarkdown(
-        "✅ **Ad Watched!** ✅\n\n" +
-        "🔓 Penalty removed!\n" +
-        "🎮 Use /play to start a new game!"
+        `Games played: ${userData.games_played}\n` +
+        `Wins: ${userData.wins}`
     );
 });
 
 bot.command('stats', async (ctx) => {
     const userId = ctx.from.id;
     const userData = getUser(userId);
-    
-    const winRate = userData.games_played > 0 
-        ? (userData.wins / userData.games_played * 100).toFixed(1) 
-        : 0;
+    const winRate = userData.games_played > 0 ? (userData.wins / userData.games_played * 100).toFixed(1) : 0;
     
     await ctx.replyWithMarkdown(
-        `📊 **Your Stats** 📊\n\n` +
+        `📊 **Your Stats**\n\n` +
         `🎮 Games played: ${userData.games_played}\n` +
         `🏆 Wins: ${userData.wins}\n` +
         `💀 Loss streak: ${userData.loss_streak}/3\n` +
         `💰 Balance: $${userData.balance.toFixed(2)}\n` +
         `📈 Win rate: ${winRate}%\n` +
-        `✅ Verified: ${userData.verified ? 'Yes' : 'No'}\n\n` +
-        `⚠️ Bot is unbeatable - winning is a miracle!`
+        `✅ Verified: ${userData.verified ? 'Yes' : 'No'}`
     );
 });
 
-// ---------- CALLBACK HANDLERS ----------
-bot.action(/move_(\d+)/, async (ctx) => {
-    const moveIndex = parseInt(ctx.match[1]);
+// Handle callback queries
+bot.action('balance', async (ctx) => {
     const userId = ctx.from.id;
-    
+    const userData = getUser(userId);
     await ctx.answerCbQuery();
+    await ctx.replyWithMarkdown(`💰 Balance: $${userData.balance.toFixed(2)}`);
+});
+
+bot.action('stats', async (ctx) => {
+    const userId = ctx.from.id;
+    const userData = getUser(userId);
+    const winRate = userData.games_played > 0 ? (userData.wins / userData.games_played * 100).toFixed(1) : 0;
+    await ctx.answerCbQuery();
+    await ctx.replyWithMarkdown(
+        `📊 Games: ${userData.games_played} | Wins: ${userData.wins} | Win rate: ${winRate}%`
+    );
+});
+
+// ---------- API ENDPOINTS FOR FRONTEND ----------
+
+// Auth callback for Telegram login widget
+app.post('/api/auth-callback', async (req, res) => {
+    res.json({ status: 'ok' });
+});
+
+// Verify membership
+app.post('/api/verify', async (req, res) => {
+    const { telegramId } = req.body;
     
-    // Re-check membership on each move
-    const member = await isMember(userId, ctx);
-    if (!member) {
-        await ctx.editMessageText(
-            `❌ **Access Denied**\n\n` +
-            `You are not a verified member anymore.\n` +
-            `Please join ${GROUP_LINK} and send /verify`
-        );
-        return;
+    if (!telegramId) {
+        return res.status(400).json({ ok: false, error: 'No telegramId' });
     }
     
+    try {
+        // Create a fake context to use isMember function
+        const fakeCtx = { telegram: bot.telegram };
+        const member = await isMember(telegramId, fakeCtx);
+        
+        if (member) {
+            const userData = getUser(telegramId);
+            res.json({ 
+                ok: true, 
+                message: 'Welcome! You are verified!',
+                balance: userData.balance,
+                lossStreak: userData.loss_streak,
+                wins: userData.wins
+            });
+        } else {
+            res.json({ 
+                ok: false, 
+                error: 'Please join the community first.' 
+            });
+        }
+    } catch (error) {
+        console.error('Verification error:', error);
+        res.status(500).json({ ok: false, error: 'Server error' });
+    }
+});
+
+// Post to group
+app.post('/api/post-to-group', async (req, res) => {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ ok: false });
+    
+    try {
+        await bot.telegram.sendMessage(GROUP_ID, message);
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Post to group error:', error);
+        res.status(500).json({ ok: false });
+    }
+});
+
+// Get user data
+app.get('/api/user/:userId', async (req, res) => {
+    const userId = parseInt(req.params.userId);
+    const userData = getUser(userId);
+    const now = Math.floor(Date.now() / 1000);
+    
+    res.json({
+        balance: userData.balance,
+        loss_streak: userData.loss_streak,
+        penalty_end: userData.penalty_end,
+        penalty_active: userData.penalty_end > now,
+        penalty_remaining: Math.max(0, userData.penalty_end - now),
+        verified: userData.verified,
+        games_played: userData.games_played,
+        wins: userData.wins
+    });
+});
+
+// Save game result
+app.post('/api/game/result', async (req, res) => {
+    const { userId, result } = req.body;
     const userData = getUser(userId);
     const now = Math.floor(Date.now() / 1000);
     
     if (userData.penalty_end > now) {
-        const remain = userData.penalty_end - now;
-        const minutes = Math.floor(remain / 60);
-        const seconds = remain % 60;
-        await ctx.editMessageText(
-            `⛔ PENALTY ACTIVE ⛔\n\nTime remaining: ${minutes}m ${seconds}s\nUse /watchad to unlock.`
-        );
-        return;
+        return res.json({ success: false, error: "Penalty active" });
     }
     
-    let board = JSON.parse(userData.game_board || "[]");
-    if (!board.length) board = Array(9).fill(null);
+    let response = { success: true };
     
-    if (userData.current_player !== 'X') {
-        await ctx.answerCbQuery("Not your turn!");
-        return;
-    }
-    
-    if (board[moveIndex] !== null) {
-        await ctx.answerCbQuery("Invalid move!");
-        return;
-    }
-    
-    // Human move
-    board[moveIndex] = 'X';
-    let winner = checkWinner(board);
-    
-    if (winner === 'X') {
+    if (result === 'win') {
         const newBalance = userData.balance + WIN_REWARD;
         updateUser(userId, {
             balance: newBalance,
             loss_streak: 0,
-            game_board: null,
-            current_player: null,
             games_played: userData.games_played + 1,
             wins: userData.wins + 1
         });
+        response.balance = newBalance;
+        response.message = `🎉 WIN! +$${WIN_REWARD}`;
         
+        // Post to group
         try {
-            await ctx.telegram.sendMessage(
-                GROUP_ID,
-                `🏆 **MIRACLE!** ${ctx.from.first_name} DEFEATED the unbeatable bot and won $${WIN_REWARD}! 🏆`
-            );
-        } catch (e) {}
+            await bot.telegram.sendMessage(GROUP_ID, `🏆 MIRACLE! User ${userId} won and earned $${WIN_REWARD}!`);
+        } catch(e) {}
         
-        await ctx.editMessageText(
-            `🎉 **UNBELIEVABLE VICTORY!** 🎉\n\n` +
-            `You defeated the impossible bot!\n` +
-            `💰 +$${WIN_REWARD} added\n` +
-            `💵 New balance: $${newBalance.toFixed(2)}\n\n` +
-            `Use /play to start a new game!`
-        );
-        return;
-    }
-    
-    if (isDraw(board)) {
+    } else if (result === 'loss') {
+        const newLossStreak = userData.loss_streak + 1;
+        let penaltyEnd = userData.penalty_end;
+        let penaltyTriggered = false;
+        
+        if (newLossStreak >= 3) {
+            penaltyEnd = now + (PENALTY_MINUTES * 60);
+            penaltyTriggered = true;
+            response.penalty_active = true;
+            response.penalty_end = penaltyEnd;
+            
+            try {
+                await bot.telegram.sendMessage(GROUP_ID, `⚠️ User ${userId} lost 3 times! Penalty activated.`);
+            } catch(e) {}
+        }
+        
         updateUser(userId, {
-            game_board: null,
-            current_player: null,
+            loss_streak: newLossStreak,
+            penalty_end: penaltyEnd,
             games_played: userData.games_played + 1
         });
         
-        try {
-            await ctx.telegram.sendMessage(GROUP_ID, `🤝 ${ctx.from.first_name} drew with the bot.`);
-        } catch (e) {}
+        response.loss_streak = newLossStreak;
+        response.message = penaltyTriggered ? "❌ PENALTY ACTIVATED! 30min lock." : "💀 Bot wins!";
         
-        await ctx.editMessageText(
-            "🤝 **DRAW!**\n\nYou survived but didn't win.\nUse /play to try again!"
-        );
-        return;
+    } else if (result === 'draw') {
+        updateUser(userId, {
+            games_played: userData.games_played + 1
+        });
+        response.message = "🤝 Draw!";
     }
     
-    // Bot's turn
-    updateUser(userId, { game_board: JSON.stringify(board), current_player: 'O' });
-    await ctx.editMessageText("🤖 Bot is thinking...", renderBoard(board));
+    res.json(response);
+});
+
+// Watch ad to remove penalty
+app.post('/api/watchad', async (req, res) => {
+    const { userId } = req.body;
+    const userData = getUser(userId);
+    const now = Math.floor(Date.now() / 1000);
     
-    // Bot move after delay
-    setTimeout(async () => {
-        const updatedData = getUser(userId);
-        let currentBoard = JSON.parse(updatedData.game_board || "[]");
-        if (!currentBoard.length || updatedData.current_player !== 'O') return;
-        
-        const botMove = getBestMove(currentBoard);
-        if (botMove !== null) {
-            currentBoard[botMove] = 'O';
-            winner = checkWinner(currentBoard);
-            
-            if (winner === 'O') {
-                const lossStreak = updatedData.loss_streak + 1;
-                let penaltyEnd = updatedData.penalty_end;
-                
-                if (lossStreak >= 3) {
-                    penaltyEnd = Math.floor(Date.now() / 1000) + (PENALTY_MINUTES * 60);
-                    updateUser(userId, {
-                        penalty_end: penaltyEnd,
-                        loss_streak: lossStreak,
-                        game_board: null,
-                        current_player: null,
-                        games_played: updatedData.games_played + 1
-                    });
-                    
-                    try {
-                        await ctx.telegram.sendMessage(
-                            GROUP_ID,
-                            `⚠️ ${ctx.from.first_name} lost 3 times! Penalty activated (30 min).`
-                        );
-                    } catch (e) {}
-                    
-                    await ctx.editMessageText(
-                        `💀 **BOT WINS!** 💀\n\n` +
-                        `Loss streak: ${lossStreak}/3\n` +
-                        `❌ **PENALTY TRIGGERED!** ❌\n\n` +
-                        `You are locked for 30 minutes.\n` +
-                        `Use /watchad to unlock immediately.`
-                    );
-                } else {
-                    updateUser(userId, {
-                        loss_streak: lossStreak,
-                        game_board: null,
-                        current_player: null,
-                        games_played: updatedData.games_played + 1
-                    });
-                    
-                    await ctx.editMessageText(
-                        `💀 **BOT WINS!** 💀\n\n` +
-                        `Loss streak: ${lossStreak}/3\n\n` +
-                        `Use /play to try again!`
-                    );
-                }
-                return;
-            }
-            
-            if (isDraw(currentBoard)) {
-                updateUser(userId, {
-                    game_board: null,
-                    current_player: null,
-                    games_played: updatedData.games_played + 1
-                });
-                
-                try {
-                    await ctx.telegram.sendMessage(GROUP_ID, `🤝 ${ctx.from.first_name} drew with the bot.`);
-                } catch (e) {}
-                
-                await ctx.editMessageText(
-                    "🤝 **DRAW!**\n\nUse /play to try again!"
-                );
-                return;
-            }
-            
-            updateUser(userId, {
-                game_board: JSON.stringify(currentBoard),
-                current_player: 'X'
-            });
-            
-            await ctx.editMessageText(
-                "✅ **Your turn!**\n\nMake your move:",
-                renderBoard(currentBoard)
-            );
-        }
-    }, 500);
-});
-
-bot.action('reset', async (ctx) => {
-    const userId = ctx.from.id;
-    await ctx.answerCbQuery();
+    if (userData.penalty_end <= now) {
+        return res.json({ success: false, message: "No active penalty" });
+    }
     
-    updateUser(userId, { game_board: null, current_player: null });
-    await ctx.editMessageText("🔄 Game reset! Starting new game...");
+    updateUser(userId, { penalty_end: 0, loss_streak: 0 });
     
-    const board = [null, null, null, null, null, null, null, null, null];
-    updateUser(userId, { game_board: JSON.stringify(board), current_player: 'X' });
-    const keyboard = renderBoard(board);
-    await ctx.replyWithMarkdown(
-        "🎮 **New Game Started** 🎮\n\nMake your first move:",
-        keyboard
-    );
+    try {
+        await bot.telegram.sendMessage(GROUP_ID, `📺 User ${userId} watched an ad to remove penalty!`);
+    } catch(e) {}
+    
+    res.json({ success: true, message: "Penalty removed!" });
 });
 
-bot.action('noop', async (ctx) => {
-    await ctx.answerCbQuery("Invalid move!");
-});
-
-// ---------- EXPRESS SERVER ----------
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', bot: '@tictactoe1st_bot', timestamp: new Date().toISOString() });
-});
-
+// Serve the HTML file (your file is in root directory)
 app.get('/', (req, res) => {
-    res.json({ message: 'Tic-Tac-Toe Bot is running!', bot: '@tictactoe1st_bot' });
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// ---------- START BOT AND SERVER ----------
+app.get('/index.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ---------- START SERVER ----------
 const PORT = process.env.PORT || 3000;
 
+// Launch bot
 bot.launch().then(() => {
-    console.log('🤖 Bot @tictactoe1st_bot is running...');
+    console.log('🤖 Bot is running...');
     console.log(`📢 Group ID: ${GROUP_ID}`);
-    console.log(`🔗 Group Link: ${GROUP_LINK}`);
+    console.log(`🌐 Mini App URL: ${APP_URL}`);
+    console.log(`📁 HTML file location: ${path.join(__dirname, 'index.html')}`);
 }).catch((err) => {
-    console.error('Failed to launch bot:', err);
+    console.error('Bot launch error:', err);
 });
 
+// Start express server
 app.listen(PORT, () => {
-    console.log(`🌐 Web server running on port ${PORT}`);
+    console.log(`🌐 Server running on port ${PORT}`);
 });
 
-// Graceful stop
-process.once('SIGINT', () => {
-    bot.stop('SIGINT');
-    process.exit(0);
-});
-process.once('SIGTERM', () => {
-    bot.stop('SIGTERM');
-    process.exit(0);
-});
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
