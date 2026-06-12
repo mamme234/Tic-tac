@@ -176,6 +176,12 @@
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
         }
 
+        .verify-btn {
+            background: linear-gradient(135deg, #00d4ff 0%, #090979 100%);
+            width: 100%;
+            margin-top: 10px;
+        }
+
         .loading {
             display: none;
             text-align: center;
@@ -201,12 +207,6 @@
             display: none;
         }
 
-        .telegram-login {
-            margin: 20px auto;
-            display: flex;
-            justify-content: center;
-        }
-
         .status-msg {
             background: #000000aa;
             padding: 12px;
@@ -214,6 +214,7 @@
             margin: 15px 0;
             color: #ffdd99;
             font-size: 14px;
+            text-align: center;
         }
 
         button:disabled {
@@ -223,6 +224,25 @@
 
         .join-btn {
             background: linear-gradient(135deg, #00d4ff 0%, #090979 100%);
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .user-info {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 20px;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #fff;
+        }
+
+        .error {
+            color: #ff6b6b;
+        }
+
+        .success {
+            color: #4ecdc4;
         }
     </style>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -235,21 +255,22 @@
             <div class="title">🎮 Join Our Community First</div>
             <div class="subtitle">Telegram verification required</div>
         </div>
+        
+        <div class="user-info" id="userInfo">
+            Loading Telegram data...
+        </div>
+        
         <p style="color: #ccc; text-align: center; margin: 15px 0;">
             To play the unbeatable tic-tac-toe, you must be a member of our Telegram group.
         </p>
-        <a href="https://t.me/gangs234" target="_blank" style="display:block; text-align:center;">
+        
+        <a href="https://t.me/gangs234" target="_blank">
             <button class="join-btn">📢 JOIN GROUP / CHANNEL</button>
         </a>
-        <div class="status-msg" id="verifyStatus">⚡ Please log in with Telegram below</div>
-        <div class="telegram-login">
-            <script async src="https://telegram.org/js/telegram-widget.js?22"
-                data-telegram-login="tictactoe1st_bot"
-                data-size="large"
-                data-request-access="write">
-            </script>
-        </div>
-        <button id="verifyBtn" disabled style="background: #ff8811;">✅ Verify Membership</button>
+        
+        <div class="status-msg" id="verifyStatus">⚡ Click verify to check membership</div>
+        
+        <button id="verifyBtn" class="verify-btn">✅ Verify Membership</button>
     </div>
 
     <!-- GAME SCREEN -->
@@ -297,10 +318,21 @@
     tg.expand();
     tg.enableClosingConfirmation();
     
-    // Get user info from Telegram
+    // Get user info directly from Telegram WebApp
     const user = tg.initDataUnsafe?.user;
     const userId = user?.id || null;
     const userName = user?.first_name || "Player";
+    const userFullName = user?.first_name + (user?.last_name ? " " + user.last_name : "");
+    
+    // Display user info
+    const userInfoDiv = document.getElementById('userInfo');
+    if (userId) {
+        userInfoDiv.innerHTML = `✅ Logged in as: <strong>${userFullName}</strong><br>🆔 ID: ${userId}`;
+        userInfoDiv.style.color = "#4ecdc4";
+    } else {
+        userInfoDiv.innerHTML = `⚠️ Please open this game from Telegram bot!<br>Make sure you're using the official Telegram app.`;
+        userInfoDiv.style.color = "#ff6b6b";
+    }
     
     // Game state
     let board = Array(9).fill(null);
@@ -334,34 +366,29 @@
     
     // Check if user is from Telegram
     if (!userId) {
-        verifyStatus.innerHTML = '⚠️ Please open this game from Telegram bot!';
+        verifyStatus.innerHTML = '⚠️ Please open this game from Telegram bot! Make sure you are in the Telegram app.';
         verifyBtn.disabled = true;
-    }
-    
-    // Telegram login callback
-    window.onTelegramAuth = function(userData) {
-        currentUser = userData;
-        verifyStatus.innerHTML = `✅ Logged as ${userData.first_name}. Click "Verify Membership".`;
+        verifyBtn.style.opacity = "0.5";
+    } else {
+        verifyStatus.innerHTML = `✅ Welcome ${userName}! Click verify to check your membership.`;
         verifyBtn.disabled = false;
-    };
+    }
     
     // Verify membership
     verifyBtn.onclick = async () => {
-        if (!userId && !currentUser) {
-            verifyStatus.innerHTML = '❌ Please log in with Telegram first.';
+        if (!userId) {
+            verifyStatus.innerHTML = '❌ Please open this game from Telegram app!';
             return;
         }
         
-        const telegramId = userId || currentUser?.id;
-        
-        verifyStatus.innerHTML = '🔍 Checking membership...';
+        verifyStatus.innerHTML = '🔍 Checking membership... Please wait.';
         verifyBtn.disabled = true;
         
         try {
             const res = await fetch('/api/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telegramId: telegramId })
+                body: JSON.stringify({ telegramId: userId })
             });
             const data = await res.json();
             
@@ -377,11 +404,12 @@
                     initGame();
                 }, 1000);
             } else {
-                verifyStatus.innerHTML = `❌ ${data.error} Please join https://t.me/gangs234 and try again.`;
+                verifyStatus.innerHTML = `❌ ${data.error}<br>👉 Please join https://t.me/gangs234 and try again.`;
                 verifyBtn.disabled = false;
             }
         } catch(err) {
-            verifyStatus.innerHTML = '⚠️ Server error. Try again.';
+            console.error('Verification error:', err);
+            verifyStatus.innerHTML = '⚠️ Server error. Make sure the bot is running and try again.';
             verifyBtn.disabled = false;
         }
     };
@@ -418,8 +446,8 @@
             });
             const data = await response.json();
             
-            if (data.balance) userBalance = data.balance;
-            if (data.loss_streak) userLossStreak = data.loss_streak;
+            if (data.balance !== undefined) userBalance = data.balance;
+            if (data.loss_streak !== undefined) userLossStreak = data.loss_streak;
             if (data.penalty_active) {
                 penaltyActive = true;
                 penaltyEnd = data.penalty_end;
@@ -678,12 +706,6 @@
     // Event listeners
     if (resetBtn) resetBtn.onclick = () => startNewGame();
     if (watchAdBtn) watchAdBtn.onclick = () => watchAd();
-    
-    // If user already has Telegram WebApp data, auto-verify?
-    if (userId) {
-        verifyStatus.innerHTML = `✅ Logged as ${userName}. Click "Verify Membership".`;
-        verifyBtn.disabled = false;
-    }
 </script>
 </body>
     </html>
