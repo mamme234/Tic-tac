@@ -1,7 +1,7 @@
 {
-  "name": "tictactoe-backend",
-  "version": "1.0.0",
-  "description": "Backend for community‑gated tic‑tac‑toe – verifies Telegram membership & posts game results",
+  "name": "tictactoe-telegram-bot",
+  "version": "2.0.0",
+  "description": "Unbeatable tic-tac-toe bot with community verification and penalty system",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -11,15 +11,13 @@
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
-    "node-fetch": "^2.6.9"
+    "node-fetch": "^2.6.9",
+    "telegraf": "^4.12.2"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"
   },
   "engines": {
     "node": ">=14.0.0"
-  },
-  "keywords": ["telegram", "tictactoe", "game", "community"],
-  "author": "Your Name",
-  "license": "MIT"
+  }
 }
