@@ -21,7 +21,7 @@ const APP_URL = process.env.APP_URL || "https://tic-tac-ip0u.onrender.com";
 // ---------- TELEGRAM BOT ----------
 const bot = new Telegraf(BOT_TOKEN);
 
-// ---------- JSON STORAGE ----------
+// ---------- JSON STORAGE (All users & profits) ----------
 const DATA_FILE = path.join(__dirname, 'users.json');
 
 if (!fs.existsSync(DATA_FILE)) {
@@ -41,19 +41,34 @@ function writeUsers(users) {
     fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2));
 }
 
-function getUser(userId) {
+// Get or create user automatically
+function getUser(userId, username = null, firstName = null) {
     const users = readUsers();
     if (!users[userId]) {
+        // Auto-create new user
         users[userId] = {
             user_id: userId,
+            username: username,
+            first_name: firstName,
             balance: 0,
+            total_profit: 0,      // Total profit earned from wins
             loss_streak: 0,
             penalty_end: 0,
             games_played: 0,
             wins: 0,
+            draws: 0,
+            losses: 0,
             verified: false,
-            created_at: Date.now()
+            created_at: Date.now(),
+            last_active: Date.now()
         };
+        writeUsers(users);
+        console.log(`✅ New user created: ${userId} (${firstName || username || 'Unknown'})`);
+    } else {
+        // Update last active and username if changed
+        if (username) users[userId].username = username;
+        if (firstName) users[userId].first_name = firstName;
+        users[userId].last_active = Date.now();
         writeUsers(users);
     }
     return users[userId];
@@ -65,7 +80,21 @@ function updateUser(userId, updates) {
         users[userId] = { user_id: userId, created_at: Date.now() };
     }
     Object.assign(users[userId], updates);
+    
+    // Track total profit separately
+    if (updates.balance !== undefined) {
+        // Recalculate total profit from balance (since balance is cumulative)
+        users[userId].total_profit = updates.balance;
+    }
+    
     writeUsers(users);
+    return users[userId];
+}
+
+// Get all users stats (for leaderboard)
+function getAllUsers() {
+    const users = readUsers();
+    return Object.values(users).sort((a, b) => (b.balance || 0) - (a.balance || 0));
 }
 
 // ---------- MEMBERSHIP CHECK ----------
@@ -85,11 +114,13 @@ async function isMember(userId, ctx) {
 bot.start(async (ctx) => {
     const userId = ctx.from.id;
     const firstName = ctx.from.first_name;
-
+    const username = ctx.from.username;
+    
+    // Auto-create/get user
+    const userData = getUser(userId, username, firstName);
+    const member = await isMember(userId, ctx);
+    
     try {
-        const member = await isMember(userId, ctx);
-        const userData = getUser(userId);
-
         if (member) {
             await ctx.replyWithMarkdown(
                 `🎉 *WELCOME BACK ${firstName.toUpperCase()}!* 🎉
@@ -98,12 +129,15 @@ bot.start(async (ctx) => {
 
 ━━━━━━━━━━━━━━━━━━━━
 💰 *BALANCE:* $${(userData.balance || 0).toFixed(2)}
+💵 *TOTAL PROFIT:* $${(userData.total_profit || 0).toFixed(2)}
 🏆 *WINS:* ${userData.wins || 0}
 🎮 *GAMES:* ${userData.games_played || 0}
-💀 *LOSS STREAK:* ${userData.loss_streak || 0}/3
+🤝 *DRAWS:* ${userData.draws || 0}
+💀 *LOSSES:* ${userData.losses || 0}
+📈 *WIN RATE:* ${userData.games_played ? ((userData.wins / userData.games_played) * 100).toFixed(1) : 0}%
 ━━━━━━━━━━━━━━━━━━━━
 
-⚡ *IMPOSSIBLE MODE* – Bot never loses.
+⚡ *IMPOSSIBLE MODE* – Bot never loses!
 
 🎮 Tap below to play:`,
                 {
@@ -111,6 +145,7 @@ bot.start(async (ctx) => {
                         inline_keyboard: [
                             [{ text: "🎮 PLAY TIC-TAC-TOE", web_app: { url: `${APP_URL}/index.html` } }],
                             [{ text: "💰 BALANCE", callback_data: "balance" }, { text: "📊 STATS", callback_data: "stats" }],
+                            [{ text: "🏆 LEADERBOARD", callback_data: "leaderboard" }],
                             [{ text: "📢 COMMUNITY", url: GROUP_LINK }]
                         ]
                     }
@@ -139,8 +174,9 @@ bot.start(async (ctx) => {
 📱 *COMMANDS:*
 /play – Start game
 /verify – Check membership
-/balance – Balance
+/balance – Balance & profit
 /stats – Your stats
+/leaderboard – Top players
 /watchad – Remove penalty`,
                 {
                     reply_markup: {
@@ -165,7 +201,11 @@ bot.command('verify', async (ctx) => {
     if (ok) {
         const userData = getUser(userId);
         await ctx.replyWithMarkdown(
-            `✅ *VERIFIED!*\n\n💰 Balance: $${(userData.balance || 0).toFixed(2)}\n🏆 Wins: ${userData.wins || 0}\n\n🎮 Tap below to play:`,
+            `✅ *VERIFIED!*\n\n` +
+            `💰 Balance: $${(userData.balance || 0).toFixed(2)}\n` +
+            `💵 Total Profit: $${(userData.total_profit || 0).toFixed(2)}\n` +
+            `🏆 Wins: ${userData.wins || 0}\n\n` +
+            `🎮 Tap below to play:`,
             {
                 reply_markup: {
                     inline_keyboard: [
@@ -192,22 +232,59 @@ bot.command('play', async (ctx) => {
     }
     if (userData.penalty_end > 0) updateUser(userId, { penalty_end: 0, loss_streak: 0 });
     await ctx.replyWithMarkdown(
-        `🎮 *Starting game!*`,
+        `🎮 *Starting game!*\n💰 Current balance: $${(userData.balance || 0).toFixed(2)}`,
         { reply_markup: { inline_keyboard: [[{ text: "🎮 PLAY", web_app: { url: `${APP_URL}/index.html` } }]] } }
     );
 });
 
 bot.command('balance', async (ctx) => {
     const userData = getUser(ctx.from.id);
-    await ctx.replyWithMarkdown(`💰 *Balance:* $${(userData.balance || 0).toFixed(2)}`);
+    await ctx.replyWithMarkdown(
+        `💰 *YOUR FINANCES* 💰\n\n` +
+        `💵 Balance: $${(userData.balance || 0).toFixed(2)}\n` +
+        `📈 Total Profit: $${(userData.total_profit || 0).toFixed(2)}\n` +
+        `🏆 Wins: ${userData.wins || 0}\n` +
+        `🎮 Games: ${userData.games_played || 0}\n\n` +
+        `Win reward: +$${WIN_REWARD} per win`
+    );
 });
 
 bot.command('stats', async (ctx) => {
     const u = getUser(ctx.from.id);
-    const winRate = u.games_played ? (u.wins / u.games_played * 100).toFixed(1) : 0;
+    const winRate = u.games_played ? ((u.wins / u.games_played) * 100).toFixed(1) : 0;
     await ctx.replyWithMarkdown(
-        `📊 *Stats*\n🎮 Games: ${u.games_played || 0}\n🏆 Wins: ${u.wins || 0}\n💀 Loss streak: ${u.loss_streak || 0}/3\n💰 Balance: $${(u.balance || 0).toFixed(2)}\n📈 Win rate: ${winRate}%`
+        `📊 *YOUR STATISTICS* 📊\n\n` +
+        `🎮 Games played: ${u.games_played || 0}\n` +
+        `🏆 Wins: ${u.wins || 0}\n` +
+        `🤝 Draws: ${u.draws || 0}\n` +
+        `💀 Losses: ${u.losses || 0}\n` +
+        `📈 Win rate: ${winRate}%\n` +
+        `💀 Loss streak: ${u.loss_streak || 0}/3\n` +
+        `💰 Balance: $${(u.balance || 0).toFixed(2)}\n` +
+        `💵 Total Profit: $${(u.total_profit || 0).toFixed(2)}`
     );
+});
+
+bot.command('leaderboard', async (ctx) => {
+    const allUsers = getAllUsers();
+    const top10 = allUsers.slice(0, 10);
+    
+    let leaderboardText = `🏆 *TOP 10 PLAYERS* 🏆\n\n`;
+    
+    top10.forEach((user, index) => {
+        const name = user.first_name || user.username || `User ${user.user_id}`;
+        leaderboardText += `${index + 1}. ${name.substring(0, 20)}\n`;
+        leaderboardText += `   💰 $${(user.balance || 0).toFixed(2)} | 🏆 ${user.wins || 0} wins\n\n`;
+    });
+    
+    const userRank = allUsers.findIndex(u => u.user_id === ctx.from.id) + 1;
+    const currentUser = getUser(ctx.from.id);
+    
+    leaderboardText += `━━━━━━━━━━━━━━━━━━━━\n`;
+    leaderboardText += `📊 *YOUR RANK:* #${userRank} of ${allUsers.length}\n`;
+    leaderboardText += `💰 Your balance: $${(currentUser.balance || 0).toFixed(2)}`;
+    
+    await ctx.replyWithMarkdown(leaderboardText);
 });
 
 bot.command('watchad', async (ctx) => {
@@ -224,13 +301,27 @@ bot.command('watchad', async (ctx) => {
 bot.action('balance', async (ctx) => {
     await ctx.answerCbQuery();
     const u = getUser(ctx.from.id);
-    await ctx.reply(`💰 $${(u.balance || 0).toFixed(2)}`);
+    await ctx.reply(`💰 Balance: $${(u.balance || 0).toFixed(2)}\n💵 Total Profit: $${(u.total_profit || 0).toFixed(2)}`);
 });
+
 bot.action('stats', async (ctx) => {
     await ctx.answerCbQuery();
     const u = getUser(ctx.from.id);
-    await ctx.reply(`📊 Games: ${u.games_played || 0} | Wins: ${u.wins || 0}`);
+    const winRate = u.games_played ? ((u.wins / u.games_played) * 100).toFixed(1) : 0;
+    await ctx.reply(`📊 Games: ${u.games_played || 0} | Wins: ${u.wins || 0} | Win rate: ${winRate}% | Profit: $${(u.total_profit || 0).toFixed(2)}`);
 });
+
+bot.action('leaderboard', async (ctx) => {
+    await ctx.answerCbQuery();
+    const allUsers = getAllUsers();
+    const top5 = allUsers.slice(0, 5);
+    let text = "🏆 *Top 5* 🏆\n";
+    top5.forEach((u, i) => {
+        text += `${i+1}. ${u.first_name || u.username}: $${(u.balance || 0).toFixed(2)}\n`;
+    });
+    await ctx.reply(text);
+});
+
 bot.action('verify', async (ctx) => {
     await ctx.answerCbQuery();
     const ok = await isMember(ctx.from.id, ctx);
@@ -246,7 +337,14 @@ app.post('/api/verify', async (req, res) => {
         const member = await isMember(telegramId, fakeCtx);
         if (!member) return res.json({ ok: false, error: 'Join community first.' });
         const u = getUser(telegramId);
-        res.json({ ok: true, message: 'Verified!', balance: u.balance, lossStreak: u.loss_streak, wins: u.wins });
+        res.json({ 
+            ok: true, 
+            message: 'Verified!', 
+            balance: u.balance || 0, 
+            lossStreak: u.loss_streak || 0, 
+            wins: u.wins || 0,
+            totalProfit: u.total_profit || 0
+        });
     } catch (e) {
         res.status(500).json({ ok: false, error: 'Server error' });
     }
@@ -256,12 +354,15 @@ app.get('/api/user/:userId', (req, res) => {
     const u = getUser(parseInt(req.params.userId));
     const now = Math.floor(Date.now() / 1000);
     res.json({
-        balance: u.balance,
-        loss_streak: u.loss_streak,
-        penalty_end: u.penalty_end,
-        penalty_active: u.penalty_end > now,
-        wins: u.wins,
-        games_played: u.games_played
+        balance: u.balance || 0,
+        loss_streak: u.loss_streak || 0,
+        penalty_end: u.penalty_end || 0,
+        penalty_active: (u.penalty_end || 0) > now,
+        wins: u.wins || 0,
+        games_played: u.games_played || 0,
+        draws: u.draws || 0,
+        losses: u.losses || 0,
+        total_profit: u.total_profit || 0
     });
 });
 
@@ -269,30 +370,48 @@ app.post('/api/game/result', async (req, res) => {
     const { userId, result } = req.body;
     const u = getUser(userId);
     const now = Math.floor(Date.now() / 1000);
+    
     if (u.penalty_end > now) return res.json({ success: false, error: "Penalty active" });
 
     if (result === 'win') {
         const newBalance = (u.balance || 0) + WIN_REWARD;
-        updateUser(userId, { balance: newBalance, loss_streak: 0, games_played: (u.games_played || 0) + 1, wins: (u.wins || 0) + 1 });
-        await bot.telegram.sendMessage(GROUP_ID, `🏆 Miracle! User ${userId} won $${WIN_REWARD}!`).catch(()=>{});
-        return res.json({ success: true, balance: newBalance });
+        updateUser(userId, { 
+            balance: newBalance, 
+            total_profit: newBalance,
+            loss_streak: 0, 
+            games_played: (u.games_played || 0) + 1, 
+            wins: (u.wins || 0) + 1 
+        });
+        await bot.telegram.sendMessage(GROUP_ID, `🏆 MIRACLE! ${u.first_name || 'User'} won $${WIN_REWARD}! Total profit: $${newBalance.toFixed(2)}`).catch(()=>{});
+        return res.json({ success: true, balance: newBalance, total_profit: newBalance });
     }
+    
     if (result === 'loss') {
         const newStreak = (u.loss_streak || 0) + 1;
-        let penaltyEnd = u.penalty_end;
+        let penaltyEnd = u.penalty_end || 0;
         let penaltyTriggered = false;
         if (newStreak >= 3) {
             penaltyEnd = now + PENALTY_MINUTES * 60;
             penaltyTriggered = true;
-            await bot.telegram.sendMessage(GROUP_ID, `⚠️ User ${userId} lost 3 times → penalty 30min.`).catch(()=>{});
+            await bot.telegram.sendMessage(GROUP_ID, `⚠️ ${u.first_name || 'User'} lost 3 times → penalty 30min.`).catch(()=>{});
         }
-        updateUser(userId, { loss_streak: newStreak, penalty_end: penaltyEnd, games_played: (u.games_played || 0) + 1 });
+        updateUser(userId, { 
+            loss_streak: newStreak, 
+            penalty_end: penaltyEnd, 
+            games_played: (u.games_played || 0) + 1,
+            losses: (u.losses || 0) + 1
+        });
         return res.json({ success: true, loss_streak: newStreak, penalty_active: penaltyTriggered, penalty_end: penaltyEnd });
     }
+    
     if (result === 'draw') {
-        updateUser(userId, { games_played: (u.games_played || 0) + 1 });
+        updateUser(userId, { 
+            games_played: (u.games_played || 0) + 1,
+            draws: (u.draws || 0) + 1
+        });
         return res.json({ success: true });
     }
+    
     res.json({ success: false });
 });
 
@@ -301,7 +420,7 @@ app.post('/api/watchad', async (req, res) => {
     const u = getUser(userId);
     if (u.penalty_end <= Math.floor(Date.now() / 1000)) return res.json({ success: false, message: "No penalty" });
     updateUser(userId, { penalty_end: 0, loss_streak: 0 });
-    await bot.telegram.sendMessage(GROUP_ID, `📺 User ${userId} watched an ad to unlock.`).catch(()=>{});
+    await bot.telegram.sendMessage(GROUP_ID, `📺 ${u.first_name || 'User'} watched an ad to unlock.`).catch(()=>{});
     res.json({ success: true });
 });
 
@@ -310,6 +429,18 @@ app.post('/api/post-to-group', async (req, res) => {
     if (!message) return res.status(400).json({ ok: false });
     await bot.telegram.sendMessage(GROUP_ID, message).catch(()=>{});
     res.json({ ok: true });
+});
+
+// Leaderboard endpoint
+app.get('/api/leaderboard', (req, res) => {
+    const users = getAllUsers();
+    const topUsers = users.slice(0, 20).map(u => ({
+        name: u.first_name || u.username || `User ${u.user_id}`,
+        balance: u.balance || 0,
+        wins: u.wins || 0,
+        games: u.games_played || 0
+    }));
+    res.json(topUsers);
 });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
