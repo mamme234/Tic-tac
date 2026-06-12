@@ -2,157 +2,380 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tic‑Tac‑Toe · Community Lock</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tic-Tac-Toe · Impossible Mode</title>
     <style>
-        * { box-sizing: border-box; font-family: system-ui, 'Segoe UI', monospace; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
         body {
-            background: linear-gradient(145deg, #0a0f1a 0%, #05080f 100%);
-            min-height: 100vh; display: flex; justify-content: center; align-items: center;
-            margin: 0; padding: 20px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            padding: 20px;
         }
+
         .container {
-            background: #11161fe0; backdrop-filter: blur(6px);
-            border-radius: 48px; padding: 30px; max-width: 550px; width: 100%;
-            text-align: center; border: 1px solid #ffaa66;
+            max-width: 500px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 40px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        .join-screen, .game-screen {
-            transition: 0.2s;
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
         }
-        .hidden { display: none; }
-        button {
-            background: #ff8811; border: none; padding: 12px 28px;
-            border-radius: 60px; font-weight: bold; margin: 10px;
-            cursor: pointer; font-size: 1rem;
+
+        .title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.3);
         }
-        .telegram-login {
-            margin: 20px auto; display: inline-block;
+
+        .subtitle {
+            font-size: 12px;
+            color: #ff6b6b;
+            margin-top: 5px;
         }
-        .status-msg {
-            background: #000000aa; padding: 12px; border-radius: 40px;
-            margin: 15px 0; color: #ffdd99;
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 20px;
         }
+
+        .stat-card {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 20px;
+            padding: 12px;
+            text-align: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #aaa;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .penalty-timer {
+            background: rgba(255, 50, 50, 0.3);
+            border-radius: 20px;
+            padding: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #ff8888;
+            font-weight: bold;
+            display: none;
+        }
+
         .board {
-            display: grid; grid-template-columns: repeat(3,1fr); gap: 12px;
-            background: #0a0e14; padding: 18px; border-radius: 48px; margin: 20px 0;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 30px;
         }
+
         .cell {
-            aspect-ratio: 1; background: #1f2a2f; border-radius: 28px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 3.5rem; font-weight: bold; color: white;
-            cursor: pointer; box-shadow: 0 6px 0 #0a0f12;
+            aspect-ratio: 1;
+            background: linear-gradient(145deg, #2c3e50, #1a2632);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 50px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            color: white;
         }
-        .cell.X { color: #88ddff; }
-        .cell.O { color: #ffa366; }
-        .disabled .cell { pointer-events: none; opacity: 0.5; }
-        .stats { display: flex; justify-content: space-between; margin-bottom: 20px; background: #0a0e14; padding: 8px 20px; border-radius: 60px; }
+
+        .cell:active {
+            transform: scale(0.95);
+        }
+
+        .cell.disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .cell.X {
+            color: #4ecdc4;
+            text-shadow: 0 0 10px #4ecdc4;
+        }
+
+        .cell.O {
+            color: #ff6b6b;
+            text-shadow: 0 0 10px #ff6b6b;
+        }
+
+        .status {
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 30px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #2c3e50;
+            color: white;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .watch-ad-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .reset-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 10px;
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .bot-thinking {
+            animation: pulse 1s infinite;
+        }
+
+        .join-screen, .game-screen {
+            transition: 0.3s;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .telegram-login {
+            margin: 20px auto;
+            display: flex;
+            justify-content: center;
+        }
+
+        .status-msg {
+            background: #000000aa;
+            padding: 12px;
+            border-radius: 40px;
+            margin: 15px 0;
+            color: #ffdd99;
+            font-size: 14px;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .join-btn {
+            background: linear-gradient(135deg, #00d4ff 0%, #090979 100%);
+        }
     </style>
-    <script src="https://telegram.org/js/telegram-widget.js?22" async></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 <div class="container" id="app">
     <!-- JOIN SCREEN -->
     <div id="joinScreen" class="join-screen">
-        <h2>🎮 Join Our Community First</h2>
-        <p>To play the unbeatable tic‑tac‑toe, you must be a member of our Telegram group.</p>
-        <a href="https://t.me/gangs234" target="_blank" style="display:inline-block; margin:10px;">
-            <button>📢 JOIN GROUP / CHANNEL</button>
+        <div class="header">
+            <div class="title">🎮 Join Our Community First</div>
+            <div class="subtitle">Telegram verification required</div>
+        </div>
+        <p style="color: #ccc; text-align: center; margin: 15px 0;">
+            To play the unbeatable tic-tac-toe, you must be a member of our Telegram group.
+        </p>
+        <a href="https://t.me/gangs234" target="_blank" style="display:block; text-align:center;">
+            <button class="join-btn">📢 JOIN GROUP / CHANNEL</button>
         </a>
+        <div class="status-msg" id="verifyStatus">⚡ Please log in with Telegram below</div>
         <div class="telegram-login">
             <script async src="https://telegram.org/js/telegram-widget.js?22"
-                data-telegram-login="YourBotUsername"   <!-- CHANGE to your bot's username -->
+                data-telegram-login="tictactoe1st_bot"
                 data-size="large"
-                data-auth-url="http://localhost:3000/api/auth-callback"
                 data-request-access="write">
             </script>
         </div>
-        <p style="font-size:0.8rem;">Click the widget above to log in with Telegram, then we'll verify your membership.</p>
-        <div id="verifyStatus" class="status-msg">⚡ Waiting for login...</div>
-        <button id="verifyBtn" disabled>✅ Verify Membership</button>
+        <button id="verifyBtn" disabled style="background: #ff8811;">✅ Verify Membership</button>
     </div>
 
-    <!-- GAME SCREEN (initially hidden) -->
+    <!-- GAME SCREEN -->
     <div id="gameScreen" class="game-screen hidden">
-        <div class="stats">
-            <span>💰 WIN: <span id="balance">0.00</span></span>
-            <span>💀 LOSS STREAK: <span id="lossStreak">0</span>/3</span>
-            <span id="penaltyTimer">⏱️ Ready</span>
+        <div class="header">
+            <div class="title">⚡ IMPOSSIBLE TIC-TAC-TOE ⚡</div>
+            <div class="subtitle">Bot uses perfect AI - Winning is a MIRACLE!</div>
         </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">💰 BALANCE</div>
+                <div class="stat-value" id="balance">$0.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">💀 LOSS STREAK</div>
+                <div class="stat-value" id="lossStreak">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">🏆 WINS</div>
+                <div class="stat-value" id="wins">0</div>
+            </div>
+        </div>
+
+        <div class="penalty-timer" id="penaltyTimer">
+            ⛔ PENALTY ACTIVE ⛔<br>
+            <span id="timerCountdown">00:00</span>
+        </div>
+
         <div class="board" id="board"></div>
-        <div class="status-msg" id="gameStatus">🤖 Bot thinking...</div>
-        <button id="resetGame">🔄 New Game</button>
-        <button id="watchAdBtn">📺 Watch Ad → Unlock</button>
-        <p style="font-size:0.7rem; margin-top:15px;">⚠️ Bot uses perfect AI – you cannot win, only draw.</p>
+
+        <div class="status" id="status">Your turn (X)</div>
+
+        <div class="button-group">
+            <button class="reset-btn" id="resetBtn">🔄 New Game</button>
+            <button class="watch-ad-btn" id="watchAdBtn">📺 Watch Ad</button>
+        </div>
+        <div class="loading" id="loading">🤖 Bot is thinking...</div>
     </div>
 </div>
 
 <script>
-    // ---------- Global state ----------
-    let currentUser = null;         // { id, first_name }
-    let gameAllowed = false;
-    let gameState = {
-        board: Array(9).fill(null),
-        currentPlayer: 'X',
-        active: true,
-        balance: 0.0,
-        lossStreak: 0,
-        penaltyLocked: false,
-        penaltyEnd: null,
-        timerInterval: null
-    };
-
+    // Get Telegram WebApp instance
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    tg.enableClosingConfirmation();
+    
+    // Get user info from Telegram
+    const user = tg.initDataUnsafe?.user;
+    const userId = user?.id || null;
+    const userName = user?.first_name || "Player";
+    
+    // Game state
+    let board = Array(9).fill(null);
+    let currentPlayer = 'X';
+    let gameActive = true;
+    let botThinking = false;
+    let penaltyActive = false;
+    let penaltyEnd = 0;
+    let userBalance = 0;
+    let userLossStreak = 0;
+    let userWins = 0;
+    
     // DOM elements
     const joinDiv = document.getElementById('joinScreen');
     const gameDiv = document.getElementById('gameScreen');
     const verifyBtn = document.getElementById('verifyBtn');
     const verifyStatus = document.getElementById('verifyStatus');
-    const balanceSpan = document.getElementById('balance');
-    const lossSpan = document.getElementById('lossStreak');
-    const penaltyTimerSpan = document.getElementById('penaltyTimer');
-    const gameStatusDiv = document.getElementById('gameStatus');
-    const boardDiv = document.getElementById('board');
-    const resetBtn = document.getElementById('resetGame');
+    const boardElement = document.getElementById('board');
+    const statusElement = document.getElementById('status');
+    const balanceElement = document.getElementById('balance');
+    const lossStreakElement = document.getElementById('lossStreak');
+    const winsElement = document.getElementById('wins');
+    const penaltyTimerDiv = document.getElementById('penaltyTimer');
+    const timerCountdownSpan = document.getElementById('timerCountdown');
+    const loadingDiv = document.getElementById('loading');
+    const resetBtn = document.getElementById('resetBtn');
     const watchAdBtn = document.getElementById('watchAdBtn');
-
-    // ---------- Helper: post to Telegram group ----------
-    async function postToGroup(message) {
-        try {
-            await fetch('/api/post-to-group', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message })
-            });
-        } catch(e) { console.warn('Post failed', e); }
+    
+    // API base URL
+    const API_BASE = window.location.origin;
+    
+    // Check if user is from Telegram
+    if (!userId) {
+        verifyStatus.innerHTML = '⚠️ Please open this game from Telegram bot!';
+        verifyBtn.disabled = true;
     }
-
-    // ---------- Membership verification ----------
-    window.onTelegramAuth = function(user) {
-        currentUser = user;
-        verifyStatus.innerHTML = `✅ Logged as ${user.first_name}. Click "Verify Membership".`;
+    
+    // Telegram login callback
+    window.onTelegramAuth = function(userData) {
+        currentUser = userData;
+        verifyStatus.innerHTML = `✅ Logged as ${userData.first_name}. Click "Verify Membership".`;
         verifyBtn.disabled = false;
     };
-
+    
+    // Verify membership
     verifyBtn.onclick = async () => {
-        if (!currentUser) {
+        if (!userId && !currentUser) {
             verifyStatus.innerHTML = '❌ Please log in with Telegram first.';
             return;
         }
+        
+        const telegramId = userId || currentUser?.id;
+        
         verifyStatus.innerHTML = '🔍 Checking membership...';
         verifyBtn.disabled = true;
+        
         try {
             const res = await fetch('/api/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telegramId: currentUser.id })
+                body: JSON.stringify({ telegramId: telegramId })
             });
             const data = await res.json();
+            
             if (data.ok) {
                 verifyStatus.innerHTML = `🎉 ${data.message} Starting game...`;
-                gameAllowed = true;
-                joinDiv.classList.add('hidden');
-                gameDiv.classList.remove('hidden');
-                initGame();
-                postToGroup(`🎮 *${currentUser.first_name}* started playing the IMPOSSIBLE tic‑tac‑toe! Can they survive?`);
+                userBalance = data.balance || 0;
+                userLossStreak = data.lossStreak || 0;
+                userWins = data.wins || 0;
+                
+                setTimeout(() => {
+                    joinDiv.classList.add('hidden');
+                    gameDiv.classList.remove('hidden');
+                    initGame();
+                }, 1000);
             } else {
                 verifyStatus.innerHTML = `❌ ${data.error} Please join https://t.me/gangs234 and try again.`;
                 verifyBtn.disabled = false;
@@ -162,217 +385,305 @@
             verifyBtn.disabled = false;
         }
     };
-
-    // ---------- GAME LOGIC (unbeatable minimax) ----------
+    
+    // API Calls
+    async function fetchUserData() {
+        try {
+            const response = await fetch(`/api/user/${userId}`);
+            const data = await response.json();
+            userBalance = data.balance;
+            userLossStreak = data.loss_streak;
+            userWins = data.wins;
+            penaltyActive = data.penalty_active;
+            penaltyEnd = data.penalty_end;
+            
+            updateUI();
+            
+            if (penaltyActive) {
+                startPenaltyTimer();
+                gameActive = false;
+                statusElement.textContent = "⛔ PENALTY ACTIVE! Watch ad to play ⛔";
+            }
+        } catch (error) {
+            console.error('Error fetching user data:', error);
+        }
+    }
+    
+    async function saveGameResult(result) {
+        try {
+            const response = await fetch('/api/game/result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, result })
+            });
+            const data = await response.json();
+            
+            if (data.balance) userBalance = data.balance;
+            if (data.loss_streak) userLossStreak = data.loss_streak;
+            if (data.penalty_active) {
+                penaltyActive = true;
+                penaltyEnd = data.penalty_end;
+                startPenaltyTimer();
+            }
+            
+            updateUI();
+            return data;
+        } catch (error) {
+            console.error('Error saving result:', error);
+        }
+    }
+    
+    async function watchAd() {
+        if (!penaltyActive) {
+            statusElement.textContent = "No penalty active! Keep playing!";
+            return;
+        }
+        
+        loadingDiv.style.display = 'block';
+        statusElement.textContent = "📺 Loading ad...";
+        
+        try {
+            const response = await fetch('/api/watchad', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                penaltyActive = false;
+                penaltyTimerDiv.style.display = 'none';
+                statusElement.textContent = "✅ Penalty removed! Start new game!";
+                startNewGame();
+            } else {
+                statusElement.textContent = data.message;
+            }
+        } catch (error) {
+            console.error('Error watching ad:', error);
+            statusElement.textContent = "Ad failed. Try again!";
+        } finally {
+            loadingDiv.style.display = 'none';
+        }
+    }
+    
+    function updateUI() {
+        balanceElement.textContent = `$${userBalance.toFixed(2)}`;
+        lossStreakElement.textContent = userLossStreak;
+        winsElement.textContent = userWins;
+    }
+    
+    function startPenaltyTimer() {
+        penaltyTimerDiv.style.display = 'block';
+        const interval = setInterval(() => {
+            const now = Math.floor(Date.now() / 1000);
+            const remaining = penaltyEnd - now;
+            
+            if (remaining <= 0) {
+                clearInterval(interval);
+                penaltyTimerDiv.style.display = 'none';
+                penaltyActive = false;
+                statusElement.textContent = "Penalty expired! Start new game!";
+                startNewGame();
+            } else {
+                const minutes = Math.floor(remaining / 60);
+                const seconds = remaining % 60;
+                timerCountdownSpan.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }, 1000);
+    }
+    
+    // Tic-Tac-Toe AI (Unbeatable)
     function checkWinner(boardArr) {
         const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-        for(let l of lines) {
-            const [a,b,c] = l;
-            if(boardArr[a] && boardArr[a]===boardArr[b] && boardArr[a]===boardArr[c]) return boardArr[a];
+        for (let line of lines) {
+            const [a,b,c] = line;
+            if (boardArr[a] && boardArr[a] === boardArr[b] && boardArr[a] === boardArr[c]) {
+                return boardArr[a];
+            }
         }
         return null;
     }
-    function isDraw(boardArr) { return boardArr.every(c => c !== null); }
-
-    function minimax(newBoard, depth, isMax) {
-        let winner = checkWinner(newBoard);
-        if(winner === 'O') return 10 - depth;
-        if(winner === 'X') return -10 + depth;
-        if(isDraw(newBoard)) return 0;
-        if(isMax) {
+    
+    function isDraw(boardArr) {
+        return boardArr.every(cell => cell !== null);
+    }
+    
+    function minimax(boardArr, depth, isMax) {
+        const winner = checkWinner(boardArr);
+        if (winner === 'O') return 10 - depth;
+        if (winner === 'X') return -10 + depth;
+        if (isDraw(boardArr)) return 0;
+        
+        if (isMax) {
             let best = -Infinity;
-            for(let i=0;i<9;i++) {
-                if(!newBoard[i]) {
-                    newBoard[i] = 'O';
-                    best = Math.max(best, minimax(newBoard, depth+1, false));
-                    newBoard[i] = null;
+            for (let i = 0; i < 9; i++) {
+                if (!boardArr[i]) {
+                    boardArr[i] = 'O';
+                    best = Math.max(best, minimax(boardArr, depth + 1, false));
+                    boardArr[i] = null;
                 }
             }
             return best;
         } else {
             let best = Infinity;
-            for(let i=0;i<9;i++) {
-                if(!newBoard[i]) {
-                    newBoard[i] = 'X';
-                    best = Math.min(best, minimax(newBoard, depth+1, true));
-                    newBoard[i] = null;
+            for (let i = 0; i < 9; i++) {
+                if (!boardArr[i]) {
+                    boardArr[i] = 'X';
+                    best = Math.min(best, minimax(boardArr, depth + 1, true));
+                    boardArr[i] = null;
                 }
             }
             return best;
         }
     }
-    function getBotMove(boardArr) {
-        let bestScore = -Infinity, bestMove = -1;
-        for(let i=0;i<9;i++) {
-            if(!boardArr[i]) {
-                let copy = [...boardArr];
-                copy[i] = 'O';
-                let score = minimax(copy, 0, false);
-                if(score > bestScore) { bestScore = score; bestMove = i; }
+    
+    function getBestMove(boardArr) {
+        let bestScore = -Infinity;
+        let bestMove = null;
+        for (let i = 0; i < 9; i++) {
+            if (!boardArr[i]) {
+                boardArr[i] = 'O';
+                const score = minimax(boardArr, 0, false);
+                boardArr[i] = null;
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = i;
+                }
             }
         }
         return bestMove;
     }
-
-    async function applyLossPenalty() {
-        gameState.penaltyLocked = true;
-        gameState.penaltyEnd = Date.now() + 30*60*1000;
-        updatePenaltyUI();
-        gameState.timerInterval = setInterval(() => {
-            if(gameState.penaltyLocked && Date.now() >= gameState.penaltyEnd) {
-                clearPenaltyLock();
-            } else updatePenaltyUI();
-        }, 1000);
-        gameStatusDiv.innerText = '⛔ PENALTY: 30 min wait OR watch ad!';
-        renderBoard();
-        await postToGroup(`⚠️ ${currentUser.first_name} lost 3 times! Penalty activated (30 min or ad).`);
-    }
-
-    function clearPenaltyLock() {
-        if(gameState.timerInterval) clearInterval(gameState.timerInterval);
-        gameState.penaltyLocked = false;
-        gameState.lossStreak = 0;
-        gameState.penaltyEnd = null;
-        updateStatsUI();
-        updatePenaltyUI();
-        gameStatusDiv.innerText = 'Penalty removed. Good luck!';
-        resetGame();
-    }
-
-    function updateStatsUI() {
-        balanceSpan.innerText = gameState.balance.toFixed(2);
-        lossSpan.innerText = gameState.lossStreak;
-    }
-    function updatePenaltyUI() {
-        if(!gameState.penaltyLocked) penaltyTimerSpan.innerText = '⏱️ Ready';
-        else if(gameState.penaltyEnd) {
-            let sec = Math.max(0, Math.floor((gameState.penaltyEnd - Date.now())/1000));
-            let m = Math.floor(sec/60), s = sec%60;
-            penaltyTimerSpan.innerText = `🔒 ${m}:${s.toString().padStart(2,'0')}`;
+    
+    async function botMove() {
+        if (!gameActive || currentPlayer !== 'O' || botThinking || penaltyActive) return;
+        
+        botThinking = true;
+        loadingDiv.style.display = 'block';
+        statusElement.classList.add('bot-thinking');
+        statusElement.textContent = "🤖 Bot is thinking... 🤖";
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const bestMove = getBestMove([...board]);
+        
+        if (bestMove !== null) {
+            await makeMove(bestMove, 'O');
         }
+        
+        loadingDiv.style.display = 'none';
+        statusElement.classList.remove('bot-thinking');
+        botThinking = false;
     }
-
-    async function endGame(winner) {
-        gameState.active = false;
-        if(winner === 'X') {
-            gameState.balance += 0.1;
-            gameState.lossStreak = 0;
-            gameStatusDiv.innerText = '🎉 MIRACLE WIN! +0.1$ 🎉';
-            await postToGroup(`🔥 MIRACLE! ${currentUser.first_name} DEFEATED the unbeatable bot and won $0.1! 🔥`);
-        } else if(winner === 'O') {
-            gameState.lossStreak++;
-            gameStatusDiv.innerText = '💀 Bot wins again...';
-            if(gameState.lossStreak >= 3) await applyLossPenalty();
-            await postToGroup(`🤖 ${currentUser.first_name} lost to the perfect bot. Loss streak: ${gameState.lossStreak}/3.`);
-        } else if(winner === null && isDraw(gameState.board)) {
-            gameStatusDiv.innerText = '♾️ Draw. Bot remains unbeaten.';
-            await postToGroup(`♾️ ${currentUser.first_name} managed a DRAW against the impossible AI.`);
-        }
-        updateStatsUI();
+    
+    async function makeMove(index, player) {
+        if (!gameActive || penaltyActive) return false;
+        if (board[index] !== null) return false;
+        if (currentPlayer !== player) return false;
+        
+        board[index] = player;
         renderBoard();
-    }
-
-    function makeMove(idx, player) {
-        if(!gameState.active || gameState.penaltyLocked) return false;
-        if(gameState.currentPlayer !== player) return false;
-        if(gameState.board[idx] !== null) return false;
-        gameState.board[idx] = player;
-        renderBoard();
-        let winner = checkWinner(gameState.board);
-        if(winner) { endGame(winner); return true; }
-        if(isDraw(gameState.board)) { endGame(null); return true; }
-        gameState.currentPlayer = (gameState.currentPlayer === 'X') ? 'O' : 'X';
-        gameStatusDiv.innerText = gameState.currentPlayer === 'X' ? 'Your turn (X)' : 'Bot thinking...';
-        if(gameState.currentPlayer === 'O' && gameState.active && !gameState.penaltyLocked) {
-            setTimeout(() => botTurn(), 200);
+        
+        const winner = checkWinner(board);
+        
+        if (winner === 'X') {
+            gameActive = false;
+            statusElement.textContent = "🎉 MIRACLE! YOU WON! 🎉";
+            const result = await saveGameResult('win');
+            if (result.balance) userBalance = result.balance;
+            updateUI();
+            return true;
         }
+        
+        if (winner === 'O') {
+            gameActive = false;
+            statusElement.textContent = "💀 BOT WINS! 💀";
+            const result = await saveGameResult('loss');
+            if (result.loss_streak) userLossStreak = result.loss_streak;
+            if (result.penalty_active) {
+                penaltyActive = true;
+                penaltyEnd = result.penalty_end;
+                startPenaltyTimer();
+            }
+            updateUI();
+            return true;
+        }
+        
+        if (isDraw(board)) {
+            gameActive = false;
+            statusElement.textContent = "🤝 DRAW! 🤝";
+            await saveGameResult('draw');
+            return true;
+        }
+        
+        currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+        statusElement.textContent = currentPlayer === 'X' ? "Your turn (X)" : "Bot's turn...";
+        
+        if (currentPlayer === 'O' && gameActive && !penaltyActive) {
+            await botMove();
+        }
+        
         return true;
     }
-
-    function botTurn() {
-        if(!gameState.active || gameState.penaltyLocked || gameState.currentPlayer !== 'O') return;
-        let move = getBotMove(gameState.board);
-        if(move !== -1) makeMove(move, 'O');
-    }
-
-    function humanMove(idx) {
-        if(gameState.penaltyLocked) { gameStatusDiv.innerText = '🔒 Locked! Watch ad or wait.'; return; }
-        if(!gameState.active) { gameStatusDiv.innerText = 'Game over. Press New Game.'; return; }
-        if(gameState.currentPlayer !== 'X') return;
-        makeMove(idx, 'X');
-    }
-
-    function resetGame() {
-        if(gameState.penaltyLocked) {
-            gameStatusDiv.innerText = 'Cannot reset while locked. Watch ad.';
+    
+    function humanMove(index) {
+        if (penaltyActive) {
+            statusElement.textContent = "⛔ Penalty active! Watch ad to play!";
             return;
         }
-        gameState.board = Array(9).fill(null);
-        gameState.currentPlayer = 'X';
-        gameState.active = true;
-        gameStatusDiv.innerText = 'Your turn (X)';
+        if (!gameActive) {
+            statusElement.textContent = "Game over! Click New Game!";
+            return;
+        }
+        if (currentPlayer !== 'X') {
+            statusElement.textContent = "Wait for bot!";
+            return;
+        }
+        if (board[index] !== null) return;
+        
+        makeMove(index, 'X');
+    }
+    
+    function startNewGame() {
+        if (penaltyActive) {
+            statusElement.textContent = "⛔ Penalty active! Watch ad to play!";
+            return;
+        }
+        
+        board = Array(9).fill(null);
+        currentPlayer = 'X';
+        gameActive = true;
+        botThinking = false;
+        statusElement.textContent = "Your turn (X)";
         renderBoard();
     }
-
+    
     function renderBoard() {
-        boardDiv.innerHTML = '';
-        for(let i=0;i<9;i++) {
-            let cell = document.createElement('div');
+        boardElement.innerHTML = '';
+        for (let i = 0; i < 9; i++) {
+            const cell = document.createElement('div');
             cell.className = 'cell';
-            if(gameState.board[i] === 'X') cell.classList.add('X');
-            if(gameState.board[i] === 'O') cell.classList.add('O');
-            cell.textContent = gameState.board[i] || '';
-            cell.onclick = (function(idx){ return ()=>humanMove(idx); })(i);
-            boardDiv.appendChild(cell);
-        }
-        if(gameState.penaltyLocked) boardDiv.parentElement.classList.add('disabled');
-        else boardDiv.parentElement.classList.remove('disabled');
-    }
-
-    // Ad integration (your provided script)
-    async function watchAd() {
-        if(typeof window.show_11068102 !== 'function') {
-            gameStatusDiv.innerText = 'Ad SDK not ready.';
-            return;
-        }
-        try {
-            await window.show_11068102(); // rewarded interstitial
-            if(gameState.penaltyLocked) {
-                clearPenaltyLock();
-                gameStatusDiv.innerText = 'Ad watched! Penalty removed.';
-                await postToGroup(`📺 ${currentUser.first_name} watched an ad to remove penalty.`);
-                resetGame();
-            } else {
-                gameStatusDiv.innerText = 'Thanks for watching! No penalty active.';
-            }
-        } catch(e) {
-            gameStatusDiv.innerText = 'Ad incomplete / error. Try again.';
+            if (board[i] === 'X') cell.classList.add('X');
+            if (board[i] === 'O') cell.classList.add('O');
+            cell.textContent = board[i] || '';
+            cell.onclick = () => humanMove(i);
+            boardElement.appendChild(cell);
         }
     }
-
+    
     function initGame() {
-        gameState = {
-            board: Array(9).fill(null),
-            currentPlayer: 'X',
-            active: true,
-            balance: 0.0,
-            lossStreak: 0,
-            penaltyLocked: false,
-            penaltyEnd: null,
-            timerInterval: null
-        };
-        updateStatsUI();
-        updatePenaltyUI();
-        renderBoard();
-        gameStatusDiv.innerText = 'Your turn (X) — but bot is perfect!';
-        resetBtn.onclick = () => resetGame();
-        watchAdBtn.onclick = () => watchAd();
+        fetchUserData();
+        startNewGame();
     }
-
-    // fallback: if Telegram widget not ready
-    if(!window.TelegramLoginWidget) {
-        verifyStatus.innerHTML = '⚠️ Please allow scripts from telegram.org';
+    
+    // Event listeners
+    if (resetBtn) resetBtn.onclick = () => startNewGame();
+    if (watchAdBtn) watchAdBtn.onclick = () => watchAd();
+    
+    // If user already has Telegram WebApp data, auto-verify?
+    if (userId) {
+        verifyStatus.innerHTML = `✅ Logged as ${userName}. Click "Verify Membership".`;
+        verifyBtn.disabled = false;
     }
 </script>
 </body>
-</html>
+    </html>
